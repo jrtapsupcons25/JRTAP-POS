@@ -230,6 +230,7 @@ th.admin-only,td.admin-only{}
     <button class="tab-btn" onclick="switchTab('expenses',this)">Expenses</button>
     <button class="tab-btn admin-only" onclick="switchTab('reports',this)">Analytics</button>
     <button class="tab-btn" onclick="switchTab('inventory',this)">Inventory</button>
+    <button class="tab-btn admin-only" onclick="switchTab('projects',this)">Projects</button>
     <button class="tab-btn admin-only" onclick="switchTab('staff',this)">Staff</button>
   </div>
 
@@ -373,6 +374,25 @@ th.admin-only,td.admin-only{}
       </div>
     </div>
 
+    <div id="projectsTab" class="tab-content">
+      <div class="panel">
+        <h3>New <span>Project</span></h3>
+        <div class="form-row">
+          <input type="text" id="projName" placeholder="Project name">
+          <input type="text" id="projClient" placeholder="Client name">
+          <input type="text" id="projSite" placeholder="Site / address">
+          <button class="primary-btn" onclick="addProject()">Create project</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:16px;">
+        <h3>Project <span>List</span></h3>
+        <table class="data-table">
+          <thead><tr><th>Project</th><th>Client</th><th>Status</th><th>Items pulled</th><th>Cost value</th><th>Billed value (+20%)</th><th>Margin</th><th>Actions</th></tr></thead>
+          <tbody id="projectsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div id="staffTab" class="tab-content">
       <div class="panel">
         <h3>Staff <span>Accounts</span></h3>
@@ -490,6 +510,42 @@ th.admin-only,td.admin-only{}
     <div class="modal-actions">
       <button class="danger-btn" id="removePhotoBtn" style="flex:1;padding:13px;display:none;" onclick="removeProductPhoto()">Remove photo</button>
       <button class="cancel-btn" onclick="closeModal('photoModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="projectHistoryModal" class="modal">
+  <div class="modal-content" style="max-width:700px;">
+    <h2>Materials delivered <span style="color:var(--red)" id="historyProjName"></span></h2>
+    <div class="reports-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
+      <div class="metric-card"><div class="metric-label">Total items</div><div class="metric-value" id="histQty" style="font-size:20px;">0</div></div>
+      <div class="metric-card"><div class="metric-label">Cost value</div><div class="metric-value" id="histCost" style="font-size:20px;">&#8369;0</div></div>
+      <div class="metric-card hot"><div class="metric-label">Billed value</div><div class="metric-value" id="histBilled" style="font-size:20px;">&#8369;0</div></div>
+    </div>
+    <div style="max-height:340px;overflow-y:auto;">
+      <table class="data-table">
+        <thead><tr><th>Date</th><th>Material</th><th>Qty</th><th>Unit</th><th>Cost</th><th>Billed</th><th>Line total</th><th>By</th></tr></thead>
+        <tbody id="historyTable"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="confirm-btn" onclick="exportProjectHistoryCSV()">Export CSV</button>
+      <button class="cancel-btn" onclick="closeModal('projectHistoryModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="pulloutModal" class="modal">
+  <div class="modal-content" style="max-width:520px;">
+    <h2>Pull materials <span style="color:var(--red)" id="pulloutProjName"></span></h2>
+    <input type="text" id="pulloutSearch" placeholder="Search products to pull..." style="width:100%;padding:11px;border:2px solid var(--line);border-radius:3px;font-size:13px;margin-bottom:10px;">
+    <div id="pulloutSearchResults" style="max-height:150px;overflow-y:auto;margin-bottom:12px;"></div>
+    <div id="pulloutCart" style="max-height:220px;overflow-y:auto;border-top:2px dashed var(--line);border-bottom:2px dashed var(--line);padding:8px 0;margin-bottom:12px;"></div>
+    <div class="summary-row"><span>Total cost value</span><span id="pulloutTotalCost">&#8369;0.00</span></div>
+    <div class="summary-row total"><span>Total billed (+20%)</span><span id="pulloutTotalBilled">&#8369;0.00</span></div>
+    <div class="modal-actions">
+      <button class="confirm-btn" id="pulloutConfirmBtn" onclick="confirmPullout()" disabled>Confirm pull-out</button>
+      <button class="cancel-btn" onclick="closeModal('pulloutModal')">Cancel</button>
     </div>
   </div>
 </div>
@@ -1048,6 +1104,7 @@ function switchTab(tab, btn){
   if(tab==='reports') loadDashboard();
   if(tab==='inventory') renderInventory();
   if(tab==='staff') loadStaff();
+  if(tab==='projects') loadProjects();
   if(tab==='customers') renderCustomers();
 }
 
@@ -1405,6 +1462,184 @@ async function removeProductPhoto(){
   if(document.getElementById('inventoryTab').classList.contains('active')) renderInventory();
   toast('Photo removed');
 }
+
+
+/* ================= projects / material pull-outs ================= */
+
+let historyProjectId = null;
+function openProjectHistory(projectId){
+  historyProjectId = projectId;
+  const proj = projects.find(x=>x.id===projectId);
+  const rows = pullouts.filter(x=>x.project_id===projectId).sort((a,b)=>new Date(b.pulled_at)-new Date(a.pulled_at));
+  document.getElementById('historyProjName').textContent = proj ? '- '+proj.name : '';
+  const totQty = rows.reduce((s,x)=>s+Number(x.qty),0);
+  const totCost = rows.reduce((s,x)=>s+Number(x.line_cost),0);
+  const totBilled = rows.reduce((s,x)=>s+Number(x.line_total),0);
+  document.getElementById('histQty').textContent = totQty;
+  document.getElementById('histCost').textContent = peso(totCost);
+  document.getElementById('histBilled').textContent = peso(totBilled);
+  document.getElementById('historyTable').innerHTML = rows.length ? rows.map(r=>`
+    <tr><td>${new Date(r.pulled_at).toLocaleString('en-PH')}</td><td><b>${r.product_name}</b></td>
+    <td>${r.qty}</td><td></td><td>${peso(r.unit_cost)}</td><td>${peso(r.unit_price)}</td>
+    <td><b>${peso(r.line_total)}</b></td><td>${r.pulled_by_name||''}</td></tr>`).join('') :
+    '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px;">No materials delivered to this project yet</td></tr>';
+  document.getElementById('projectHistoryModal').classList.add('active');
+}
+function exportProjectHistoryCSV(){
+  const proj = projects.find(x=>x.id===historyProjectId);
+  const rows = pullouts.filter(x=>x.project_id===historyProjectId).sort((a,b)=>new Date(a.pulled_at)-new Date(b.pulled_at));
+  if(!rows.length){ toast('No materials to export'); return; }
+  const out = [['Date','Time','Material','Qty','Unit Cost','Unit Billed (+20%)','Line Cost','Line Billed','Pulled By']];
+  rows.forEach(r=>{
+    const d = new Date(r.pulled_at);
+    out.push([d.toLocaleDateString('en-PH'), d.toLocaleTimeString('en-PH'), r.product_name, r.qty,
+      r.unit_cost, r.unit_price, r.line_cost, r.line_total, r.pulled_by_name||'']);
+  });
+  const csv = out.map(r=>r.map(csvCell).join(',')).join('\n');
+  download('project-'+(proj?proj.name.replace(/[^a-z0-9]+/gi,'-'):historyProjectId)+'-materials.csv', csv);
+  toast('Exported', true);
+}
+function csvCell(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';}
+function download(filename, content){
+  const blob = new Blob([content], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+let projects = [];
+let pullouts = [];
+let pulloutCart = [];
+let activeProjectId = null;
+
+async function loadProjects(){
+  if(!requireOnline('Loading projects')) return;
+  const [{ data: pData, error: pErr }, { data: poData, error: poErr }] = await Promise.all([
+    sb.from('projects').select('*').order('created_at', {ascending:false}),
+    sb.from('project_pullouts').select('*')
+  ]);
+  if(pErr){ toast('Could not load projects: '+pErr.message); return; }
+  projects = pData || [];
+  pullouts = poData || [];
+  renderProjects();
+}
+function projectTotals(id){
+  const rows = pullouts.filter(x=>x.project_id===id);
+  return {
+    count: rows.length,
+    qty: rows.reduce((s,x)=>s+Number(x.qty),0),
+    cost: rows.reduce((s,x)=>s+Number(x.line_cost),0),
+    billed: rows.reduce((s,x)=>s+Number(x.line_total),0)
+  };
+}
+function renderProjects(){
+  const t = document.getElementById('projectsTable'); if(!t) return;
+  t.innerHTML = projects.length ? projects.map(p=>{
+    const tt = projectTotals(p.id);
+    return `<tr>
+      <td><b>${p.name}</b>${p.site?`<br><span style="color:var(--muted);font-size:10.5px;">${p.site}</span>`:''}</td>
+      <td>${p.client_name||'-'}</td>
+      <td><span class="stock-badge ${p.status==='active'?'stock-ok':p.status==='completed'?'stock-low':'stock-out'}">${p.status}</span></td>
+      <td>${tt.count} lines &middot; ${tt.qty}</td>
+      <td>${peso(tt.cost)}</td>
+      <td><b>${peso(tt.billed)}</b></td>
+      <td>${peso(tt.billed-tt.cost)}</td>
+      <td>
+        <button class="stock-btn" onclick="openPullout(${p.id})">Pull materials</button>
+        <button class="stock-btn" onclick="openProjectHistory(${p.id})">View materials</button>
+        ${p.status==='active'?`<button class="stock-btn" onclick="setProjectStatus(${p.id},'completed')">Complete</button>`:''}
+      </td></tr>`;
+  }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">No projects yet</td></tr>';
+}
+async function addProject(){
+  if(!requireOnline('Creating a project')) return;
+  const name = document.getElementById('projName').value.trim();
+  if(!name){ toast('Enter a project name'); return; }
+  const row = { name, client_name:document.getElementById('projClient').value.trim(),
+    site:document.getElementById('projSite').value.trim(), created_by: me.id };
+  const { error } = await sb.from('projects').insert(row);
+  if(error){ toast('Could not create project: '+error.message); return; }
+  ['projName','projClient','projSite'].forEach(i=>document.getElementById(i).value='');
+  await loadProjects(); toast(name+' created', true);
+}
+async function setProjectStatus(id, status){
+  const { error } = await sb.from('projects').update({ status }).eq('id', id);
+  if(error){ toast('Could not update project: '+error.message); return; }
+  await loadProjects(); toast('Project updated', true);
+}
+
+function openPullout(projectId){
+  activeProjectId = projectId;
+  pulloutCart = [];
+  const p = projects.find(x=>x.id===projectId);
+  document.getElementById('pulloutProjName').textContent = p ? '- '+p.name : '';
+  document.getElementById('pulloutSearch').value = '';
+  document.getElementById('pulloutSearchResults').innerHTML = '';
+  renderPulloutCart();
+  document.getElementById('pulloutModal').classList.add('active');
+}
+function searchPulloutProducts(){
+  const s = document.getElementById('pulloutSearch').value.trim().toLowerCase();
+  const box = document.getElementById('pulloutSearchResults');
+  if(!s){ box.innerHTML=''; return; }
+  const matches = products.filter(p=>p.sellable!==false && p.name.toLowerCase().includes(s)).slice(0,8);
+  box.innerHTML = matches.map(p=>`
+    <div class="stock-btn" style="display:block;width:100%;text-align:left;margin-bottom:5px;cursor:pointer;" onclick="addToPullout(${p.id})">
+      ${p.name} <span style="color:var(--muted);float:right;">${p.stock} ${p.unit} on hand &middot; cost ${peso(p.cost)}</span>
+    </div>`).join('') || '<div style="color:var(--muted);font-size:12px;padding:6px;">No matches</div>';
+}
+function addToPullout(id){
+  const p = products.find(x=>x.id===id); if(!p) return;
+  if(p.stock<=0){ toast('Out of stock'); return; }
+  const existing = pulloutCart.find(x=>x.id===id);
+  if(existing){ if(existing.qty<p.stock) existing.qty++; else { toast('Only '+p.stock+' in stock'); return; } }
+  else pulloutCart.push({ id:p.id, name:p.name, unit:p.unit, stock:p.stock, cost:p.cost, price:Math.round(p.cost*1.20*100)/100, qty:1 });
+  document.getElementById('pulloutSearch').value='';
+  document.getElementById('pulloutSearchResults').innerHTML='';
+  renderPulloutCart();
+}
+function updatePulloutQty(id,q){
+  const i = pulloutCart.find(x=>x.id===id); if(!i) return;
+  i.qty = Math.max(1, Math.min(parseInt(q)||1, i.stock));
+  renderPulloutCart();
+}
+function removeFromPullout(id){ pulloutCart = pulloutCart.filter(x=>x.id!==id); renderPulloutCart(); }
+function renderPulloutCart(){
+  const box = document.getElementById('pulloutCart');
+  box.innerHTML = pulloutCart.length ? pulloutCart.map(i=>`
+    <div class="cart-line">
+      <div class="cart-line-top">
+        <div class="cart-item-name">${i.name}</div>
+        <div class="cart-item-qty"><input type="number" value="${i.qty}" min="1" max="${i.stock}" onchange="updatePulloutQty(${i.id},this.value)"></div>
+        <div style="width:70px;text-align:right;font-weight:800;">${peso(i.price*i.qty)}</div>
+        <button class="remove-btn" onclick="removeFromPullout(${i.id})">&times;</button>
+      </div>
+      <div class="cart-line-meta"><span>cost ${peso(i.cost)} &rarr; billed ${peso(i.price)} (+20%)</span><span></span></div>
+    </div>`).join('') : '<div class="cart-empty">No materials added yet</div>';
+  const totalCost = pulloutCart.reduce((s,i)=>s+i.cost*i.qty,0);
+  const totalBilled = pulloutCart.reduce((s,i)=>s+i.price*i.qty,0);
+  document.getElementById('pulloutTotalCost').textContent = peso(totalCost);
+  document.getElementById('pulloutTotalBilled').textContent = peso(totalBilled);
+  document.getElementById('pulloutConfirmBtn').disabled = pulloutCart.length===0;
+}
+async function confirmPullout(){
+  if(!requireOnline('Recording a pull-out')) return;
+  if(!pulloutCart.length) return;
+  const btn = document.getElementById('pulloutConfirmBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Saving';
+  const { data, error } = await sb.rpc('record_project_pullout', {
+    p_project_id: activeProjectId,
+    p_device: navigator.userAgent.slice(0,40),
+    p_items: pulloutCart.map(i=>({ product_id:i.id, qty:i.qty }))
+  });
+  btn.disabled=false; btn.textContent='Confirm pull-out';
+  if(error){ toast('Could not record pull-out: '+error.message); return; }
+  closeModal('pulloutModal');
+  pulloutCart = [];
+  await loadProducts();
+  await loadProjects();
+  toast('Materials pulled - '+peso(data.total_billed)+' billed to project', true);
+}
+document.addEventListener('input', e=>{ if(e.target.id==='pulloutSearch') searchPulloutProducts(); });
 
 /* ================= staff ================= */
 async function loadStaff(){
