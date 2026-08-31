@@ -683,13 +683,15 @@ async function login(){
 
   if(error){
     btn.disabled=false; btn.textContent='Sign in';
+    const raw = (error.name||'Error') + ': ' + (error.message||error);
     if(isNetworkError(error)){
-      hint.textContent='No internet connection - the first sign-in on a device needs to be online';
+      hint.innerHTML = 'No internet connection detected.<br><span style="font-size:10px;opacity:.8;">'+raw+'</span>';
     } else {
-      hint.textContent='Incorrect username or password';
+      hint.innerHTML = 'Incorrect username or password.<br><span style="font-size:10px;opacity:.8;">'+raw+'</span>';
       document.getElementById('loginPass').value='';
     }
     hint.className='login-hint err';
+    console.error('LOGIN ERROR DETAIL:', error);
     return;
   }
 
