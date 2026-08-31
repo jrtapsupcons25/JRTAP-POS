@@ -891,8 +891,20 @@ function initCategories(){
 function renderProducts(){
   const s=document.getElementById('searchBox').value.toLowerCase();
   const c=document.getElementById('categoryFilter').value;
-  const list=products.filter(p=>p.sellable && p.name.toLowerCase().includes(s) && (!c||p.category===c)).slice(0,150);
-  document.getElementById('productGrid').innerHTML = list.length ? list.map(p=>`
+  const grid=document.getElementById('productGrid');
+
+  if(!s && !c){
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:40px 20px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:6px;">${products.length} products in your catalog</div>
+      <div style="font-size:12px;">Type a product name above, or pick a category, to browse.</div>
+    </div>`;
+    return;
+  }
+
+  const matches=products.filter(p=>p.sellable && p.name.toLowerCase().includes(s) && (!c||p.category===c));
+  const CAP=200;
+  const list=matches.slice(0,CAP);
+  let html = list.length ? list.map(p=>`
     <div class="product-item ${p.stock<=0?'out':''}" onclick="addToCart(${p.id})">
       ${p.image_url?`<img class="product-thumb" src="${p.image_url}" loading="lazy">`:'<div class="product-thumb-placeholder">&#128247;</div>'}
       <div class="product-name">${p.name}</div>
@@ -900,7 +912,11 @@ function renderProducts(){
       <div class="product-cost">+VAT ${peso(p.srp*1.12)}${isAdmin()?' &middot; cost '+peso(p.cost):''}</div>
       <div class="product-stock">${p.stock} ${p.unit} on hand</div>
       <button class="add-btn" ${p.stock<=0?'disabled':''}>${p.stock<=0?'Out':'Add'}</button>
-    </div>`).join('') : '<p style="color:var(--muted);font-size:12px;padding:20px;">No products match that search.</p>';
+    </div>`).join('') : '<p style="grid-column:1/-1;color:var(--muted);font-size:12px;padding:20px;">No products match that search.</p>';
+  if(matches.length>CAP){
+    html += `<div style="grid-column:1/-1;text-align:center;color:var(--muted);font-size:11px;padding:10px;">${matches.length-CAP} more match - keep typing to narrow it down</div>`;
+  }
+  grid.innerHTML = html;
 }
 document.getElementById('searchBox').addEventListener('input', renderProducts);
 document.getElementById('categoryFilter').addEventListener('change', renderProducts);
@@ -1353,13 +1369,27 @@ async function confirmNewProduct(){
   const stock=parseInt(document.getElementById('npStock').value)||0;
   if(!name||!cost){ toast('Enter product name and unit cost'); return; }
   if(!srp||srp<=0) srp = Math.round(cost*(1+mk/100)*100)/100;
+
+  const nameLower = name.toLowerCase();
+  const existing = products.find(p => p.name.toLowerCase() === nameLower);
+  if(existing){
+    const proceed = confirm(`"${existing.name}" already exists (${existing.stock} ${existing.unit} in stock, SRP ${peso(existing.srp)}).\n\nTo add stock to that item instead, cancel this and use "Receive" in Inventory.\n\nAdd this as a separate, new item anyway?`);
+    if(!proceed) return;
+  }
+
   const row = { name, category:document.getElementById('npCategory').value, cost, srp, stock,
     unit:document.getElementById('npUnit').value.trim()||'PCS', sellable:true };
   const { error } = await sb.from('products').insert(row);
   if(error){ toast('Could not add product: '+error.message); return; }
   closeModal('newProductModal');
-  await loadProducts(); renderInventory();
-  toast(name+' added at SRP '+peso(srp), true);
+  await loadProducts();
+  document.getElementById('invSearch').value = name;
+  document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(e=>e.classList.remove('active'));
+  document.getElementById('inventoryTab').classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(b=>{ if(b.textContent.trim()==='Inventory') b.classList.add('active'); });
+  renderInventory();
+  toast(name+' added at SRP '+peso(srp)+' - showing it below', true);
 }
 
 
