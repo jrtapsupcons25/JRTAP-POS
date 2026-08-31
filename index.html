@@ -171,6 +171,23 @@ th.admin-only,td.admin-only{}
 .receipt-logo{width:150px;margin:0 auto 8px;display:block;}
 .receipt-divider{border-top:1px dashed #111;margin:8px 0;}
 .receipt-line{display:flex;justify-content:space-between;padding:2px 0;text-align:left;gap:10px;}
+
+/* 58mm thermal receipt printing - only the receipt shows, sized to the roll */
+@media print{
+  @page{ size:58mm auto; margin:0; }
+  html,body{ width:58mm; margin:0; padding:0; background:#fff; }
+  body *{ visibility:hidden; }
+  #receiptModal, #receiptModal *{ visibility:visible; }
+  #receiptModal{ position:absolute; inset:0; background:#fff; display:block; padding:0; }
+  #receiptModal .modal-content{
+    box-shadow:none; border:none; border-radius:0; max-width:58mm; width:58mm;
+    padding:2mm; margin:0; max-height:none; overflow:visible;
+  }
+  #receiptModal .modal-actions{ display:none; }
+  .receipt{ font-size:10px; line-height:1.45; }
+  .receipt-logo{ width:38mm; }
+  .receipt-line{ gap:4px; }
+}
 #toastWrap{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:2000;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;}
 .toast{background:var(--ink);color:#fff;padding:12px 20px;border-radius:3px;font-size:12.5px;font-weight:700;border-left:4px solid var(--red);box-shadow:0 12px 30px rgba(0,0,0,.3);animation:toastIn .25s ease both;max-width:88vw;}
 .toast.good{border-left-color:#4CAF50;}
