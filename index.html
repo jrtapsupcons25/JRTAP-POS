@@ -74,6 +74,8 @@ body[data-role="cashier"] .admin-only{display:none !important;}
 .product-item{background:#fff;padding:13px 11px;border-radius:3px;border:1px solid var(--line);border-bottom:3px solid var(--line);cursor:pointer;text-align:center;transition:.2s;}
 .product-item:hover{border-bottom-color:var(--red);transform:translateY(-4px);box-shadow:0 10px 22px rgba(17,17,17,.12);}
 .product-item.out{opacity:.45;}
+.product-thumb{width:100%;height:78px;object-fit:cover;border-radius:3px;margin-bottom:7px;background:#F4F5F7;}
+.product-thumb-placeholder{width:100%;height:78px;border-radius:3px;margin-bottom:7px;background:#F4F5F7;display:flex;align-items:center;justify-content:center;color:#CBCDD2;font-size:22px;}
 .product-name{font-weight:700;font-size:11.5px;margin-bottom:7px;min-height:30px;line-height:1.3;}
 .product-price{color:var(--red);font-weight:900;font-size:16px;}
 .product-cost{font-size:9.5px;color:var(--muted);font-weight:700;}
@@ -128,6 +130,8 @@ body[data-role="cashier"] .admin-only{display:none !important;}
 table.data-table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);}
 table.data-table th{background:#F4F5F7;color:var(--ink-2);padding:11px;text-align:left;font-weight:800;font-size:10px;letter-spacing:1px;text-transform:uppercase;border-bottom:2px solid var(--line);}
 table.data-table td{padding:11px;border-bottom:1px solid var(--line);font-size:12.5px;}
+.inv-thumb{width:42px;height:42px;object-fit:cover;border-radius:3px;background:#F4F5F7;display:block;}
+.inv-thumb-placeholder{width:42px;height:42px;border-radius:3px;background:#F4F5F7;display:flex;align-items:center;justify-content:center;color:#CBCDD2;font-size:16px;}
 table.data-table tr:hover td{background:#FAFAFB;}
 th.admin-only,td.admin-only{}
 .stock-badge{display:inline-block;padding:4px 10px;border-radius:2px;font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;}
@@ -346,7 +350,7 @@ th.admin-only,td.admin-only{}
           <button class="primary-btn admin-only" onclick="openNewProduct()">New product</button>
         </div>
         <table class="data-table">
-          <thead><tr><th>Product</th><th>Category</th><th>Stock</th><th>Unit</th><th class="admin-only">Cost</th><th>SRP (net)</th><th>With VAT</th><th class="admin-only">Margin</th><th>Status</th><th class="admin-only">Delivery</th></tr></thead>
+          <thead><tr><th>Photo</th><th>Product</th><th>Category</th><th>Stock</th><th>Unit</th><th class="admin-only">Cost</th><th>SRP (net)</th><th>With VAT</th><th class="admin-only">Margin</th><th>Status</th><th class="admin-only">Delivery</th></tr></thead>
           <tbody id="inventoryTable"></tbody>
         </table>
       </div>
@@ -449,6 +453,26 @@ th.admin-only,td.admin-only{}
     <div class="modal-actions">
       <button class="confirm-btn" onclick="confirmNewProduct()">Add product</button>
       <button class="cancel-btn" onclick="closeModal('newProductModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="photoModal" class="modal">
+  <div class="modal-content" style="max-width:380px;">
+    <h2>Product <span style="color:var(--red)">photo</span></h2>
+    <div style="text-align:center;margin-bottom:16px;">
+      <img id="photoPreview" src="" class="hidden" style="width:100%;max-height:260px;object-fit:contain;border-radius:4px;background:#F4F5F7;">
+      <div id="photoPlaceholder" style="width:100%;height:200px;border-radius:4px;background:#F4F5F7;display:flex;align-items:center;justify-content:center;color:#CBCDD2;font-size:40px;">&#128247;</div>
+    </div>
+    <div id="photoProdName" style="text-align:center;font-weight:800;font-size:13px;margin-bottom:14px;"></div>
+    <input type="file" id="photoFileInput" accept="image/*" capture="environment" class="hidden" onchange="handlePhotoFile(event)">
+    <div class="util-bar" style="margin-bottom:0;">
+      <button class="primary-btn" style="flex:1;" onclick="document.getElementById('photoFileInput').click()">Take / choose photo</button>
+    </div>
+    <div id="photoUploadStatus" style="text-align:center;font-size:11px;color:var(--muted);margin-top:10px;min-height:14px;"></div>
+    <div class="modal-actions">
+      <button class="danger-btn" id="removePhotoBtn" style="flex:1;padding:13px;display:none;" onclick="removeProductPhoto()">Remove photo</button>
+      <button class="cancel-btn" onclick="closeModal('photoModal')">Close</button>
     </div>
   </div>
 </div>
@@ -756,7 +780,7 @@ function subscribeRealtime(){
 function mapProductRow(r){
   return { id:r.id, name:r.name, category:r.category, unit:r.unit,
     cost:isAdmin()?Number(r.cost):undefined, srp:Number(r.srp), stock:Number(r.stock),
-    sellable:r.sellable, needs_count:r.needs_count };
+    sellable:r.sellable, needs_count:r.needs_count, image_url:r.image_url||null };
 }
 
 /* ================= products ================= */
@@ -775,7 +799,8 @@ async function loadProducts(){
     id:r.id, name:r.name, category:r.category||'Others', unit:r.unit||'PCS',
     cost: isAdmin() ? Number(r.cost||0) : undefined,
     srp: Number(r.srp||0), stock: Number(r.stock||0),
-    sellable: r.sellable, needs_count: r.needs_count||false
+    sellable: r.sellable, needs_count: r.needs_count||false,
+    image_url: r.image_url || null
   }));
   cacheProducts();
   initCategories(); renderProducts();
@@ -796,6 +821,7 @@ function renderProducts(){
   const list=products.filter(p=>p.sellable && p.name.toLowerCase().includes(s) && (!c||p.category===c)).slice(0,150);
   document.getElementById('productGrid').innerHTML = list.length ? list.map(p=>`
     <div class="product-item ${p.stock<=0?'out':''}" onclick="addToCart(${p.id})">
+      ${p.image_url?`<img class="product-thumb" src="${p.image_url}" loading="lazy">`:'<div class="product-thumb-placeholder">&#128247;</div>'}
       <div class="product-name">${p.name}</div>
       <div class="product-price">${peso(p.srp)}</div>
       <div class="product-cost">+VAT ${peso(p.srp*1.12)}${isAdmin()?' &middot; cost '+peso(p.cost):''}</div>
@@ -1204,11 +1230,14 @@ async function renderInventory(){
     else { cl='stock-ok'; tx='In stock'; }
     if(p.needs_count) tx+=' &middot; recount';
     const mk = (isAdmin() && p.cost>0) ? Math.round((p.srp-p.cost)/p.cost*100) : null;
-    return `<tr><td><b>${p.name}</b></td><td>${p.category}</td><td>${p.stock}</td><td>${p.unit}</td>
+    const thumb = p.image_url
+      ? `<img class="inv-thumb" src="${p.image_url}" loading="lazy" onclick="openPhotoModal(${p.id})" style="cursor:pointer;">`
+      : `<div class="inv-thumb-placeholder" ${isAdmin()?`onclick="openPhotoModal(${p.id})" style="cursor:pointer;"`:''}>&#128247;</div>`;
+    return `<tr><td>${thumb}</td><td><b>${p.name}</b></td><td>${p.category}</td><td>${p.stock}</td><td>${p.unit}</td>
       ${isAdmin()?`<td>${peso(p.cost)}</td>`:''}<td><b>${peso(p.srp)}</b></td><td>${peso(p.srp*1.12)}</td>
       ${isAdmin()?`<td>${mk!==null?`<span class="margin-pill ${mk<30?'thin':''}">+${mk}%</span>`:'-'}</td>`:''}
       <td><span class="stock-badge ${cl}">${tx}</span></td>
-      ${isAdmin()?`<td><button class="stock-btn" onclick="openRestock(${p.id})">Receive</button></td>`:''}</tr>`;
+      ${isAdmin()?`<td><button class="stock-btn" onclick="openRestock(${p.id})">Receive</button>${p.image_url?`<button class="stock-btn" onclick="openPhotoModal(${p.id})">Photo</button>`:''}</td>`:''}</tr>`;
   }).join('');
 }
 function openRestock(id){
@@ -1257,6 +1286,107 @@ async function confirmNewProduct(){
   closeModal('newProductModal');
   await loadProducts(); renderInventory();
   toast(name+' added at SRP '+peso(srp), true);
+}
+
+
+/* ================= product photos ================= */
+let photoProductId = null;
+
+function openPhotoModal(id){
+  const p = products.find(x=>x.id===id); if(!p) return;
+  photoProductId = id;
+  document.getElementById('photoProdName').textContent = p.name;
+  document.getElementById('photoUploadStatus').textContent = '';
+  const img = document.getElementById('photoPreview'), ph = document.getElementById('photoPlaceholder');
+  if(p.image_url){
+    img.src = p.image_url; img.classList.remove('hidden'); ph.classList.add('hidden');
+    document.getElementById('removePhotoBtn').style.display = isAdmin() ? 'block' : 'none';
+  } else {
+    img.classList.add('hidden'); ph.classList.remove('hidden');
+    document.getElementById('removePhotoBtn').style.display = 'none';
+  }
+  document.getElementById('photoModal').classList.add('active');
+}
+
+function resizeImage(file, maxDim){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = e => { img.src = e.target.result; };
+    reader.onerror = reject;
+    img.onload = () => {
+      let { width, height } = img;
+      if(width > height && width > maxDim){ height = Math.round(height * maxDim/width); width = maxDim; }
+      else if(height > maxDim){ width = Math.round(width * maxDim/height); height = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not process image')), 'image/jpeg', 0.75);
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handlePhotoFile(e){
+  if(!requireOnline('Uploading a photo')) return;
+  const file = e.target.files[0]; if(!file) return;
+  const status = document.getElementById('photoUploadStatus');
+  status.textContent = 'Preparing photo...';
+  let blob;
+  try{ blob = await resizeImage(file, 900); }
+  catch(err){ status.textContent = 'Could not read that photo - try another'; return; }
+
+  status.innerHTML = '<span class="spinner" style="border-color:rgba(17,17,17,.2);border-top-color:var(--red);"></span>Uploading...';
+  const path = 'products/' + photoProductId + '-' + Date.now() + '.jpg';
+  try{
+    const { error: upErr } = await sb.storage.from('product-images').upload(path, blob, {
+      contentType: 'image/jpeg', upsert: false
+    });
+    if(upErr) throw upErr;
+    const { data: pub } = sb.storage.from('product-images').getPublicUrl(path);
+    const url = pub.publicUrl;
+
+    const oldUrl = (products.find(x=>x.id===photoProductId)||{}).image_url;
+
+    const { error: dbErr } = await sb.from('products').update({ image_url: url }).eq('id', photoProductId);
+    if(dbErr) throw dbErr;
+
+    if(oldUrl){
+      const oldPath = oldUrl.split('/product-images/')[1];
+      if(oldPath) sb.storage.from('product-images').remove([oldPath]).catch(()=>{});
+    }
+
+    const p = products.find(x=>x.id===photoProductId);
+    if(p) p.image_url = url;
+    cacheProducts();
+    document.getElementById('photoPreview').src = url;
+    document.getElementById('photoPreview').classList.remove('hidden');
+    document.getElementById('photoPlaceholder').classList.add('hidden');
+    document.getElementById('removePhotoBtn').style.display = 'block';
+    status.textContent = 'Photo saved';
+    renderProducts();
+    if(document.getElementById('inventoryTab').classList.contains('active')) renderInventory();
+    toast('Photo saved', true);
+  }catch(err){
+    status.textContent = 'Upload failed: ' + (err.message||err);
+    toast('Could not upload photo: ' + (err.message||err));
+  }
+}
+
+async function removeProductPhoto(){
+  if(!requireOnline('Removing a photo')) return;
+  const p = products.find(x=>x.id===photoProductId); if(!p || !p.image_url) return;
+  if(!confirm('Remove this product\'s photo?')) return;
+  const oldPath = p.image_url.split('/product-images/')[1];
+  const { error } = await sb.from('products').update({ image_url: null }).eq('id', photoProductId);
+  if(error){ toast('Could not remove photo: '+error.message); return; }
+  if(oldPath) sb.storage.from('product-images').remove([oldPath]).catch(()=>{});
+  p.image_url = null; cacheProducts();
+  closeModal('photoModal');
+  renderProducts();
+  if(document.getElementById('inventoryTab').classList.contains('active')) renderInventory();
+  toast('Photo removed');
 }
 
 /* ================= staff ================= */
