@@ -550,6 +550,20 @@ th.admin-only,td.admin-only{}
   </div>
 </div>
 
+<div id="returnModal" class="modal">
+  <div class="modal-content" style="max-width:520px;">
+    <h2>Return materials <span style="color:var(--red)" id="returnProjName"></span></h2>
+    <div id="returnEligibleList" style="max-height:260px;overflow-y:auto;margin-bottom:12px;"></div>
+    <div id="returnCart" style="max-height:220px;overflow-y:auto;border-top:2px dashed var(--line);border-bottom:2px dashed var(--line);padding:8px 0;margin-bottom:12px;"></div>
+    <div class="summary-row"><span>Cost value returning</span><span id="returnTotalCost">&#8369;0.00</span></div>
+    <div class="summary-row total"><span>Billed value reversed</span><span id="returnTotalBilled">&#8369;0.00</span></div>
+    <div class="modal-actions">
+      <button class="confirm-btn" id="returnConfirmBtn" onclick="confirmReturn()" disabled>Confirm return</button>
+      <button class="cancel-btn" onclick="closeModal('returnModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="pwModal" class="modal">
   <div class="modal-content" style="max-width:380px;">
     <h2>Change <span style="color:var(--red)">password</span></h2>
@@ -1502,16 +1516,21 @@ function openProjectHistory(projectId){
   const proj = projects.find(x=>x.id===projectId);
   const rows = pullouts.filter(x=>x.project_id===projectId).sort((a,b)=>new Date(b.pulled_at)-new Date(a.pulled_at));
   document.getElementById('historyProjName').textContent = proj ? '- '+proj.name : '';
-  const totQty = rows.reduce((s,x)=>s+Number(x.qty),0);
+  const totQty = rows.reduce((s,x)=>s+Number(x.qty)*(x.movement_type==='return'?-1:1),0);
   const totCost = rows.reduce((s,x)=>s+Number(x.line_cost),0);
   const totBilled = rows.reduce((s,x)=>s+Number(x.line_total),0);
   document.getElementById('histQty').textContent = totQty;
   document.getElementById('histCost').textContent = peso(totCost);
   document.getElementById('histBilled').textContent = peso(totBilled);
-  document.getElementById('historyTable').innerHTML = rows.length ? rows.map(r=>`
-    <tr><td>${new Date(r.pulled_at).toLocaleString('en-PH')}</td><td><b>${r.product_name}</b></td>
-    <td>${r.qty}</td><td></td><td>${peso(r.unit_cost)}</td><td>${peso(r.unit_price)}</td>
-    <td><b>${peso(r.line_total)}</b></td><td>${r.pulled_by_name||''}</td></tr>`).join('') :
+  document.getElementById('historyTable').innerHTML = rows.length ? rows.map(r=>{
+    const isReturn = r.movement_type==='return';
+    return `<tr${isReturn?' style="background:#FFF8F0;"':''}>
+      <td>${new Date(r.pulled_at).toLocaleString('en-PH')}</td>
+      <td><b>${r.product_name}</b>${isReturn?' <span class="stock-badge stock-low" style="margin-left:4px;">Return</span>':''}</td>
+      <td>${isReturn?'-':''}${r.qty}</td><td></td>
+      <td>${peso(r.unit_cost)}</td><td>${peso(r.unit_price)}</td>
+      <td><b style="${isReturn?'color:var(--red);':''}">${peso(r.line_total)}</b></td><td>${r.pulled_by_name||''}</td></tr>`;
+  }).join('') :
     '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px;">No materials delivered to this project yet</td></tr>';
   document.getElementById('projectHistoryModal').classList.add('active');
 }
@@ -1519,11 +1538,11 @@ function exportProjectHistoryCSV(){
   const proj = projects.find(x=>x.id===historyProjectId);
   const rows = pullouts.filter(x=>x.project_id===historyProjectId).sort((a,b)=>new Date(a.pulled_at)-new Date(b.pulled_at));
   if(!rows.length){ toast('No materials to export'); return; }
-  const out = [['Date','Time','Material','Qty','Unit Cost','Unit Billed (+20%)','Line Cost','Line Billed','Pulled By']];
+  const out = [['Date','Time','Type','Material','Qty','Unit Cost','Unit Billed (+20%)','Line Cost','Line Billed','Pulled By']];
   rows.forEach(r=>{
     const d = new Date(r.pulled_at);
-    out.push([d.toLocaleDateString('en-PH'), d.toLocaleTimeString('en-PH'), r.product_name, r.qty,
-      r.unit_cost, r.unit_price, r.line_cost, r.line_total, r.pulled_by_name||'']);
+    out.push([d.toLocaleDateString('en-PH'), d.toLocaleTimeString('en-PH'), r.movement_type==='return'?'Return':'Pull-out',
+      r.product_name, r.qty, r.unit_cost, r.unit_price, r.line_cost, r.line_total, r.pulled_by_name||'']);
   });
   const csv = out.map(r=>r.map(csvCell).join(',')).join('\n');
   download('project-'+(proj?proj.name.replace(/[^a-z0-9]+/gi,'-'):historyProjectId)+'-materials.csv', csv);
@@ -1556,16 +1575,28 @@ async function loadProjects(){
 function projectTotals(id){
   const rows = pullouts.filter(x=>x.project_id===id);
   return {
-    count: rows.length,
-    qty: rows.reduce((s,x)=>s+Number(x.qty),0),
+    count: rows.filter(x=>x.movement_type!=='return').length,
+    qty: rows.reduce((s,x)=>s+Number(x.qty)*(x.movement_type==='return'?-1:1),0),
     cost: rows.reduce((s,x)=>s+Number(x.line_cost),0),
     billed: rows.reduce((s,x)=>s+Number(x.line_total),0)
   };
+}
+// products currently outstanding (pulled but not yet returned) on a given project
+function outstandingForProject(projectId){
+  const rows = pullouts.filter(x=>x.project_id===projectId);
+  const byProduct = {};
+  rows.forEach(r=>{
+    const key = r.product_id;
+    if(!byProduct[key]) byProduct[key] = { product_id:key, name:r.product_name, qty:0 };
+    byProduct[key].qty += Number(r.qty) * (r.movement_type==='return' ? -1 : 1);
+  });
+  return Object.values(byProduct).filter(x=>x.qty > 0.0001);
 }
 function renderProjects(){
   const t = document.getElementById('projectsTable'); if(!t) return;
   t.innerHTML = projects.length ? projects.map(p=>{
     const tt = projectTotals(p.id);
+    const hasOutstanding = outstandingForProject(p.id).length > 0;
     return `<tr>
       <td><b>${p.name}</b>${p.site?`<br><span style="color:var(--muted);font-size:10.5px;">${p.site}</span>`:''}</td>
       <td>${p.client_name||'-'}</td>
@@ -1576,6 +1607,7 @@ function renderProjects(){
       <td>${peso(tt.billed-tt.cost)}</td>
       <td>
         <button class="stock-btn" onclick="openPullout(${p.id})">Pull materials</button>
+        ${hasOutstanding?`<button class="stock-btn" onclick="openReturn(${p.id})">Return materials</button>`:''}
         <button class="stock-btn" onclick="openProjectHistory(${p.id})">View materials</button>
         ${p.status==='active'?`<button class="stock-btn" onclick="setProjectStatus(${p.id},'completed')">Complete</button>`:''}
       </td></tr>`;
@@ -1670,6 +1702,75 @@ async function confirmPullout(){
   toast('Materials pulled - '+peso(data.total_billed)+' billed to project', true);
 }
 document.addEventListener('input', e=>{ if(e.target.id==='pulloutSearch') searchPulloutProducts(); });
+
+/* ================= project material returns ================= */
+let returnCart = [];
+
+function openReturn(projectId){
+  activeProjectId = projectId;
+  returnCart = [];
+  const p = projects.find(x=>x.id===projectId);
+  document.getElementById('returnProjName').textContent = p ? '- '+p.name : '';
+  renderReturnEligibleList();
+  renderReturnCart();
+  document.getElementById('returnModal').classList.add('active');
+}
+function renderReturnEligibleList(){
+  const box = document.getElementById('returnEligibleList');
+  const eligible = outstandingForProject(activeProjectId).filter(o => !returnCart.find(c=>c.id===o.product_id));
+  box.innerHTML = eligible.length ? eligible.map(o=>`
+    <div class="stock-btn" style="display:block;width:100%;text-align:left;margin-bottom:5px;cursor:pointer;" onclick="addToReturn(${o.product_id})">
+      ${o.name} <span style="color:var(--muted);float:right;">${o.qty} still out on this project</span>
+    </div>`).join('') : '<div style="color:var(--muted);font-size:12px;padding:6px;">Everything pulled to this project has already been returned or fully used.</div>';
+}
+function addToReturn(productId){
+  const outstanding = outstandingForProject(activeProjectId).find(o=>o.product_id===productId);
+  if(!outstanding) return;
+  const p = products.find(x=>x.id===productId);
+  returnCart.push({ id:productId, name:outstanding.name, unit:p?p.unit:'', max:outstanding.qty, qty:outstanding.qty });
+  renderReturnEligibleList();
+  renderReturnCart();
+}
+function updateReturnQty(id,q){
+  const i = returnCart.find(x=>x.id===id); if(!i) return;
+  i.qty = Math.max(1, Math.min(parseFloat(q)||1, i.max));
+  renderReturnCart();
+}
+function removeFromReturn(id){ returnCart = returnCart.filter(x=>x.id!==id); renderReturnEligibleList(); renderReturnCart(); }
+function renderReturnCart(){
+  const box = document.getElementById('returnCart');
+  box.innerHTML = returnCart.length ? returnCart.map(i=>`
+    <div class="cart-line">
+      <div class="cart-line-top">
+        <div class="cart-item-name">${i.name}</div>
+        <div class="cart-item-qty"><input type="number" value="${i.qty}" min="1" max="${i.max}" onchange="updateReturnQty(${i.id},this.value)"></div>
+        <button class="remove-btn" onclick="removeFromReturn(${i.id})">&times;</button>
+      </div>
+      <div class="cart-line-meta"><span>up to ${i.max} ${i.unit} returnable</span><span></span></div>
+    </div>`).join('') : '<div class="cart-empty">Pick an item above to return</div>';
+  // Cost/billed reversal totals are computed server-side from historical average rates,
+  // so this preview is informational only - the confirmation shows the real numbers.
+  document.getElementById('returnTotalCost').textContent = '\u2014';
+  document.getElementById('returnTotalBilled').textContent = '\u2014';
+  document.getElementById('returnConfirmBtn').disabled = returnCart.length===0;
+}
+async function confirmReturn(){
+  if(!requireOnline('Recording a return')) return;
+  if(!returnCart.length) return;
+  const btn = document.getElementById('returnConfirmBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Saving';
+  const { data, error } = await sb.rpc('record_project_return', {
+    p_project_id: activeProjectId,
+    p_device: navigator.userAgent.slice(0,40),
+    p_items: returnCart.map(i=>({ product_id:i.id, qty:i.qty }))
+  });
+  btn.disabled=false; btn.textContent='Confirm return';
+  if(error){ toast('Could not record return: '+error.message); return; }
+  closeModal('returnModal');
+  returnCart = [];
+  await loadProducts();
+  await loadProjects();
+  toast('Materials returned - '+peso(data.total_billed)+' reversed from project billing', true);
+}
 
 /* ================= staff ================= */
 async function loadStaff(){
