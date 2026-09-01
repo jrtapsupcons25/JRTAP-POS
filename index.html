@@ -524,7 +524,7 @@ th.admin-only,td.admin-only{}
     </div>
     <div style="max-height:340px;overflow-y:auto;">
       <table class="data-table">
-        <thead><tr><th>Date</th><th>Material</th><th>Qty</th><th>Unit</th><th>Cost</th><th>Billed</th><th>Line total</th><th>By</th></tr></thead>
+        <thead><tr><th>Date</th><th>Material</th><th>Qty</th><th>Unit</th><th>Cost</th><th>Billed</th><th>Line total</th><th>By</th><th></th></tr></thead>
         <tbody id="historyTable"></tbody>
       </table>
     </div>
@@ -1516,22 +1516,31 @@ function openProjectHistory(projectId){
   const proj = projects.find(x=>x.id===projectId);
   const rows = pullouts.filter(x=>x.project_id===projectId).sort((a,b)=>new Date(b.pulled_at)-new Date(a.pulled_at));
   document.getElementById('historyProjName').textContent = proj ? '- '+proj.name : '';
-  const totQty = rows.reduce((s,x)=>s+Number(x.qty)*(x.movement_type==='return'?-1:1),0);
-  const totCost = rows.reduce((s,x)=>s+Number(x.line_cost),0);
-  const totBilled = rows.reduce((s,x)=>s+Number(x.line_total),0);
+  const liveRows = rows.filter(x=>!x.voided);
+  const totQty = liveRows.reduce((s,x)=>s+Number(x.qty)*(x.movement_type==='return'?-1:1),0);
+  const totCost = liveRows.reduce((s,x)=>s+Number(x.line_cost),0);
+  const totBilled = liveRows.reduce((s,x)=>s+Number(x.line_total),0);
   document.getElementById('histQty').textContent = totQty;
   document.getElementById('histCost').textContent = peso(totCost);
   document.getElementById('histBilled').textContent = peso(totBilled);
   document.getElementById('historyTable').innerHTML = rows.length ? rows.map(r=>{
     const isReturn = r.movement_type==='return';
-    return `<tr${isReturn?' style="background:#FFF8F0;"':''}>
+    const v = r.voided;
+    const rowStyle = v ? 'background:#F4F5F7;opacity:.55;' : (isReturn?'background:#FFF8F0;':'');
+    const nameStyle = v ? 'text-decoration:line-through;' : '';
+    return `<tr style="${rowStyle}">
       <td>${new Date(r.pulled_at).toLocaleString('en-PH')}</td>
-      <td><b>${r.product_name}</b>${isReturn?' <span class="stock-badge stock-low" style="margin-left:4px;">Return</span>':''}</td>
-      <td>${isReturn?'-':''}${r.qty}</td><td></td>
+      <td><b style="${nameStyle}">${r.product_name}</b>
+        ${isReturn?' <span class="stock-badge stock-low" style="margin-left:4px;">Return</span>':''}
+        ${v?' <span class="stock-badge stock-out" style="margin-left:4px;">Undone</span>':''}</td>
+      <td style="${nameStyle}">${isReturn?'-':''}${r.qty}</td><td></td>
       <td>${peso(r.unit_cost)}</td><td>${peso(r.unit_price)}</td>
-      <td><b style="${isReturn?'color:var(--red);':''}">${peso(r.line_total)}</b></td><td>${r.pulled_by_name||''}</td></tr>`;
+      <td><b style="${isReturn&&!v?'color:var(--red);':''}${nameStyle}">${peso(r.line_total)}</b></td>
+      <td>${r.pulled_by_name||''}</td>
+      <td>${v?`<span style="color:var(--muted);font-size:10px;">by ${r.voided_by_name||''}</span>`
+             :`<button class="danger-btn" onclick="undoProjectMovement(${r.id})">Undo</button>`}</td></tr>`;
   }).join('') :
-    '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px;">No materials delivered to this project yet</td></tr>';
+    '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px;">No materials delivered to this project yet</td></tr>';
   document.getElementById('projectHistoryModal').classList.add('active');
 }
 function exportProjectHistoryCSV(){
@@ -1573,7 +1582,7 @@ async function loadProjects(){
   renderProjects();
 }
 function projectTotals(id){
-  const rows = pullouts.filter(x=>x.project_id===id);
+  const rows = pullouts.filter(x=>x.project_id===id && !x.voided);
   return {
     count: rows.filter(x=>x.movement_type!=='return').length,
     qty: rows.reduce((s,x)=>s+Number(x.qty)*(x.movement_type==='return'?-1:1),0),
@@ -1583,7 +1592,7 @@ function projectTotals(id){
 }
 // products currently outstanding (pulled but not yet returned) on a given project
 function outstandingForProject(projectId){
-  const rows = pullouts.filter(x=>x.project_id===projectId);
+  const rows = pullouts.filter(x=>x.project_id===projectId && !x.voided);
   const byProduct = {};
   rows.forEach(r=>{
     const key = r.product_id;
@@ -1702,6 +1711,17 @@ async function confirmPullout(){
   toast('Materials pulled - '+peso(data.total_billed)+' billed to project', true);
 }
 document.addEventListener('input', e=>{ if(e.target.id==='pulloutSearch') searchPulloutProducts(); });
+
+async function undoProjectMovement(pulloutId){
+  if(!requireOnline('Undoing an entry')) return;
+  if(!confirm('Undo this entry? The stock change it made will be reversed.')) return;
+  const { error } = await sb.rpc('void_project_movement', { p_pullout_id: pulloutId });
+  if(error){ toast('Could not undo: '+error.message); return; }
+  await loadProducts();
+  await loadProjects();
+  openProjectHistory(historyProjectId);
+  toast('Entry undone', true);
+}
 
 /* ================= project material returns ================= */
 let returnCart = [];
