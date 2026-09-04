@@ -227,10 +227,13 @@ th.admin-only,td.admin-only{}
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('sales',this)">Sales</button>
     <button class="tab-btn" onclick="switchTab('customers',this)">Customers</button>
+    <button class="tab-btn" onclick="switchTab('credit',this)">Credit</button>
+    <button class="tab-btn" onclick="switchTab('orders',this)">Orders</button>
     <button class="tab-btn" onclick="switchTab('expenses',this)">Expenses</button>
     <button class="tab-btn admin-only" onclick="switchTab('reports',this)">Analytics</button>
     <button class="tab-btn" onclick="switchTab('inventory',this)">Inventory</button>
     <button class="tab-btn admin-only" onclick="switchTab('projects',this)">Projects</button>
+    <button class="tab-btn admin-only" onclick="switchTab('history',this)">History</button>
     <button class="tab-btn admin-only" onclick="switchTab('staff',this)">Staff</button>
   </div>
 
@@ -296,6 +299,50 @@ th.admin-only,td.admin-only{}
       </div>
     </div>
 
+    <div id="creditTab" class="tab-content">
+      <div class="reports-grid">
+        <div class="metric-card hot"><div class="metric-label">Total outstanding</div><div class="metric-value" id="crTotalOutstanding">&#8369;0</div></div>
+        <div class="metric-card"><div class="metric-label">Customers owing</div><div class="metric-value" id="crCustomerCount">0</div></div>
+      </div>
+      <div class="panel">
+        <h3>Credit <span>/ Unpaid Balances</span></h3>
+        <div class="setup-note">Sales marked Credit stay here with the remaining balance until fully paid. Recording a payment updates the balance immediately.</div>
+        <table class="data-table">
+          <thead><tr><th>Date</th><th>Receipt</th><th>Customer</th><th>Total</th><th>Paid</th><th>Balance</th><th>By</th><th></th></tr></thead>
+          <tbody id="creditTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="ordersTab" class="tab-content">
+      <div class="reports-grid">
+        <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value" id="ordPending">0</div></div>
+        <div class="metric-card hot"><div class="metric-label">No stock</div><div class="metric-value" id="ordNoStock">0</div></div>
+        <div class="metric-card"><div class="metric-label">Delivered</div><div class="metric-value" id="ordDelivered">0</div></div>
+      </div>
+      <div class="panel admin-only">
+        <h3>New <span>Customer Order</span></h3>
+        <div class="form-row">
+          <select id="ordCustomerSelect"><option value="">Walk-in / no account</option></select>
+          <input type="text" id="ordCustomerName" placeholder="Customer name (if not in list)">
+          <input type="text" id="ordContact" placeholder="Contact number">
+          <input type="date" id="ordExpected" placeholder="Expected delivery">
+        </div>
+        <input type="text" id="ordSearch" placeholder="Search products to add to this order..." style="width:100%;padding:11px;border:2px solid var(--line);border-radius:3px;font-size:13px;margin-bottom:10px;">
+        <div id="ordSearchResults" style="max-height:150px;overflow-y:auto;margin-bottom:12px;"></div>
+        <div id="ordCart" style="max-height:220px;overflow-y:auto;border-top:2px dashed var(--line);border-bottom:2px dashed var(--line);padding:8px 0;margin-bottom:12px;"></div>
+        <textarea id="ordNotes" placeholder="Notes (optional)" style="width:100%;padding:11px;border:2px solid var(--line);border-radius:3px;font-size:12.5px;margin-bottom:12px;min-height:60px;"></textarea>
+        <button class="primary-btn" id="ordCreateBtn" onclick="confirmCreateOrder()" disabled>Create order</button>
+      </div>
+      <div class="panel" style="margin-top:16px;">
+        <h3>Order <span>List</span></h3>
+        <table class="data-table">
+          <thead><tr><th>Date</th><th>Customer</th><th>Items</th><th>Expected</th><th>Status</th><th class="admin-only"></th></tr></thead>
+          <tbody id="ordersTable"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div id="expensesTab" class="tab-content">
       <div class="panel">
         <h3>Expense <span>Log</span></h3>
@@ -338,6 +385,31 @@ th.admin-only,td.admin-only{}
       <div class="chart-container"><h4>Sales by category</h4><div class="chart-wrapper"><canvas id="chartCat"></canvas></div></div>
       <div class="chart-container"><h4>Revenue by cashier</h4><div class="chart-wrapper" style="height:230px;"><canvas id="chartEmp"></canvas></div>
         <table class="data-table" style="margin-top:16px;"><thead><tr><th>Employee</th><th>Transactions</th><th>Total sales</th><th>Items sold</th></tr></thead><tbody id="employeeTable"></tbody></table>
+      </div>
+
+      <div class="panel" style="margin-bottom:15px;">
+        <h3>Delivery <span>Status</span></h3>
+        <div class="reports-grid" style="margin-bottom:0;">
+          <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value" id="dashOrdPending">0</div></div>
+          <div class="metric-card hot"><div class="metric-label">No stock</div><div class="metric-value" id="dashOrdNoStock">0</div></div>
+          <div class="metric-card"><div class="metric-label">Delivered</div><div class="metric-value" id="dashOrdDelivered">0</div></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:15px;">
+        <h3>Top 20 <span>Fast-Moving Items</span></h3>
+        <table class="data-table">
+          <thead><tr><th>#</th><th>Product</th><th>Qty sold</th><th>Revenue</th><th>Current stock</th></tr></thead>
+          <tbody id="fastMoversTable"></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Low / Slow <span>Stock &mdash; Needs Replenishment</span></h3>
+        <table class="data-table">
+          <thead><tr><th>Product</th><th>Category</th><th>Stock left</th><th>Unit</th></tr></thead>
+          <tbody id="lowStockTable"></tbody>
+        </table>
       </div>
     </div>
 
@@ -393,6 +465,35 @@ th.admin-only,td.admin-only{}
       </div>
     </div>
 
+    <div id="historyTab" class="tab-content">
+      <div class="util-bar">
+        <select id="historyPeriod" onchange="loadActivityLog()" style="padding:10px 13px;border:2px solid var(--line);border-radius:3px;font-size:12px;font-weight:700;">
+          <option value="today" selected>Today</option><option value="week">This week</option>
+          <option value="month">This month</option><option value="all">All time</option>
+        </select>
+        <select id="historyTypeFilter" onchange="renderActivityLog()" style="padding:10px 13px;border:2px solid var(--line);border-radius:3px;font-size:12px;font-weight:700;">
+          <option value="">All activity types</option>
+          <option value="Sale">Sales</option>
+          <option value="Payment">Credit payments</option>
+          <option value="Expense">Expenses</option>
+          <option value="Delivery">Deliveries received</option>
+          <option value="Material Pull-out">Material pull-outs</option>
+          <option value="Material Return">Material returns</option>
+          <option value="Undone Entry">Undone / corrected entries</option>
+          <option value="Customer Order">Customer orders</option>
+          <option value="Staff Account">Staff accounts</option>
+        </select>
+      </div>
+      <div class="panel">
+        <h3>Activity <span id="historyCount">History</span></h3>
+        <div class="setup-note">Every sale, payment, expense, delivery, project material movement, order, and staff account change \u2014 in one timeline, most recent first.</div>
+        <table class="data-table">
+          <thead><tr><th>Date &amp; Time</th><th>Type</th><th>Details</th><th>Amount</th><th>By</th></tr></thead>
+          <tbody id="historyLogTable"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div id="staffTab" class="tab-content">
       <div class="panel">
         <h3>Staff <span>Accounts</span></h3>
@@ -416,17 +517,24 @@ th.admin-only,td.admin-only{}
 <div id="checkoutModal" class="modal">
   <div class="modal-content">
     <h2>Complete <span style="color:var(--red)">payment</span></h2>
-    <div class="payment-methods">
+    <div class="payment-methods" style="grid-template-columns:1fr 1fr 1fr;">
       <div class="payment-method active" onclick="selectPayment('cash',this)">Cash</div>
       <div class="payment-method" onclick="selectPayment('card',this)">Card</div>
+      <div class="payment-method" onclick="selectPayment('credit',this)">Credit</div>
     </div>
     <div class="payment-field">
       <label>Amount due</label>
       <input type="text" id="dueDisplay" readonly style="background:#F7F8FA;color:var(--red);">
-      <label>Amount received</label>
+      <label id="amountReceivedLabel">Amount received</label>
       <input type="number" id="amountReceived" placeholder="0.00" step="0.01">
     </div>
+    <div id="creditNote" class="setup-note hidden" style="margin-bottom:12px;">
+      This will be recorded as <b>Credit / Not Yet Paid</b>. Leave the amount at 0 for fully on-credit,
+      or enter a down payment - either way the customer must be selected above (not Walk-in) so the
+      balance can be tracked and followed up later.
+    </div>
     <div class="change-display" id="changeDisplay">Change <span id="changeAmount">0.00</span></div>
+    <div class="change-display" id="balanceDisplay" style="display:none;background:#FFF4E0;color:#8A5300;border-color:#FFD98A;">Remaining balance <span id="balanceAmount">0.00</span></div>
     <div class="modal-actions">
       <button class="confirm-btn" id="completeBtn" onclick="completePayment()">Complete sale</button>
       <button class="cancel-btn" onclick="closeModal('checkoutModal')">Cancel</button>
@@ -560,6 +668,26 @@ th.admin-only,td.admin-only{}
     <div class="modal-actions">
       <button class="confirm-btn" id="returnConfirmBtn" onclick="confirmReturn()" disabled>Confirm return</button>
       <button class="cancel-btn" onclick="closeModal('returnModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="paymentModal" class="modal">
+  <div class="modal-content" style="max-width:380px;">
+    <h2>Record <span style="color:var(--red)">payment</span></h2>
+    <div class="payment-field">
+      <label>Customer</label>
+      <input type="text" id="payCustomerName" readonly style="background:#F7F8FA;">
+      <label>Remaining balance</label>
+      <input type="text" id="payBalance" readonly style="background:#F7F8FA;color:var(--red);">
+      <label>Amount received now</label>
+      <input type="number" id="payAmount" placeholder="0.00" step="0.01">
+      <label>Note (optional)</label>
+      <input type="text" id="payNote" placeholder="e.g. paid in cash">
+    </div>
+    <div class="modal-actions">
+      <button class="confirm-btn" onclick="confirmRecordPayment()">Save payment</button>
+      <button class="cancel-btn" onclick="closeModal('paymentModal')">Cancel</button>
     </div>
   </div>
 </div>
@@ -969,7 +1097,32 @@ function toggleSenior(){
   document.getElementById('seniorId').style.display = on?'block':'none';
   if(on) setVatType('NON-VAT'); else updateCartTotals();
 }
-function selectPayment(m,el){ selectedPaymentMethod=m; document.querySelectorAll('.payment-method').forEach(e=>e.classList.remove('active')); el.classList.add('active'); }
+function selectPayment(m,el){
+  selectedPaymentMethod=m;
+  document.querySelectorAll('.payment-method').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  const isCredit = m==='credit';
+  document.getElementById('creditNote').classList.toggle('hidden', !isCredit);
+  document.getElementById('amountReceivedLabel').textContent = isCredit ? 'Down payment (optional)' : 'Amount received';
+  if(isCredit) document.getElementById('amountReceived').value = '0';
+  updatePaymentPreview();
+}
+function updatePaymentPreview(){
+  const t=cartMath();
+  const amt=parseFloat(document.getElementById('amountReceived').value)||0;
+  const changeEl=document.getElementById('changeDisplay'), balEl=document.getElementById('balanceDisplay');
+  if(selectedPaymentMethod==='credit'){
+    changeEl.style.display='none';
+    const bal = Math.max(t.total - amt, 0);
+    balEl.style.display='block';
+    document.getElementById('balanceAmount').textContent = peso(bal);
+  } else {
+    balEl.style.display='none';
+    const ch = amt - t.total;
+    if(ch>=0){ changeEl.style.display='block'; document.getElementById('changeAmount').textContent=peso(ch); }
+    else changeEl.style.display='none';
+  }
+}
 
 function cartMath(){
   const net = cart.reduce((s,i)=>s+i.price*i.qty,0);
@@ -1021,16 +1174,15 @@ function checkout(){
   document.getElementById('dueDisplay').value = peso(t.total);
   document.getElementById('amountReceived').value='';
   document.getElementById('changeDisplay').style.display='none';
+  document.getElementById('balanceDisplay').style.display='none';
+  document.getElementById('creditNote').classList.add('hidden');
+  selectedPaymentMethod='cash';
+  document.querySelectorAll('#checkoutModal .payment-method').forEach((e,i)=>e.classList.toggle('active', i===0));
+  document.getElementById('amountReceivedLabel').textContent='Amount received';
   document.getElementById('checkoutModal').classList.add('active');
 }
 document.addEventListener('input', e=>{
-  if(e.target.id==='amountReceived'){
-    const t=cartMath();
-    const ch=(parseFloat(e.target.value)||0)-t.total;
-    const d=document.getElementById('changeDisplay');
-    if(ch>=0){ d.style.display='block'; document.getElementById('changeAmount').textContent=peso(ch); }
-    else d.style.display='none';
-  }
+  if(e.target.id==='amountReceived') updatePaymentPreview();
   if(e.target.id==='invSearch') renderInventory();
 });
 document.getElementById('invFilter')?.addEventListener('change', renderInventory);
@@ -1038,9 +1190,12 @@ document.getElementById('invFilter')?.addEventListener('change', renderInventory
 async function completePayment(){
   const t=cartMath();
   const amt=parseFloat(document.getElementById('amountReceived').value)||0;
-  if(amt<t.total){ toast('Short by '+peso(t.total-amt)); return; }
-  const btn=document.getElementById('completeBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Processing';
+  const isCredit = selectedPaymentMethod==='credit';
   const cid = document.getElementById('customerSelectSale').value || null;
+  if(isCredit && !cid){ toast('Select a real customer for a credit sale - not Walk-in'); return; }
+  if(!isCredit && amt<t.total){ toast('Short by '+peso(t.total-amt)); return; }
+  if(isCredit && amt>t.total){ toast('Down payment cannot be more than the total'); return; }
+  const btn=document.getElementById('completeBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Processing';
   const custName = cid ? (customers.find(c=>String(c.id)===String(cid))||{}).name : 'Walk-in';
   const receipt = Date.now().toString(36).toUpperCase()+Math.random().toString(36).substr(2,4).toUpperCase();
 
@@ -1076,7 +1231,8 @@ async function completePayment(){
     receipt, date: new Date().toISOString(), cashier: me.full_name, customer: custName||'Walk-in',
     items: cart.map(i=>({name:i.name, qty:i.qty, price:i.price})), payment: selectedPaymentMethod,
     net: t.net, senior: t.senior, disc: t.disc, netAfter: t.netAfter, vat: t.vat, total: t.total,
-    amountReceived: amt, change: amt-t.total, vatType, pending: wentOffline || !isOnlineNow
+    amountReceived: amt, change: isCredit ? 0 : amt-t.total, vatType, pending: wentOffline || !isOnlineNow,
+    isCredit, balanceDue: data && data.balance_due!=null ? data.balance_due : Math.max(t.total-amt,0)
   };
 
   if(wentOffline){
@@ -1103,6 +1259,7 @@ function showReceipt(s){
   document.getElementById('receiptContent').innerHTML = `
     <img class="receipt-logo" src="${LOGO}" alt="JR.TAP">
     ${s.pending?'<div style="background:#FFF4E0;color:#8A5300;padding:4px;font-weight:bold;font-size:10px;margin-bottom:6px;">OFFLINE - PENDING SYNC</div>':''}
+    ${s.isCredit?'<div style="background:'+(s.balanceDue>0?'#FDECEA;color:#C22A1F':'#E8F5E9;color:#1B5E20')+';padding:4px;font-weight:bold;font-size:10px;margin-bottom:6px;">'+(s.balanceDue>0?'CREDIT - NOT YET PAID':'CREDIT - PAID IN FULL')+'</div>':''}
     <div style="font-size:9px;letter-spacing:1px;">SUPPLIES AND CONSTRUCTION SERVICES</div>
     <div class="receipt-divider"></div>
     <div class="receipt-line"><span>Receipt</span><span>#${s.receipt}</span></div>
@@ -1120,8 +1277,11 @@ function showReceipt(s){
       ? `<div class="receipt-line"><span>Non-VAT Sales</span><span>${peso(s.netAfter)}</span></div><div class="receipt-line"><span>VAT</span><span>${peso(0)}</span></div>`
       : `<div class="receipt-line"><span>VATable Sales</span><span>${peso(s.netAfter)}</span></div><div class="receipt-line"><span>VAT 12%</span><span>${peso(s.vat)}</span></div>`}
     <div class="receipt-line" style="font-weight:bold;font-size:13px;"><span>TOTAL DUE</span><span>${peso(s.total)}</span></div>
-    <div class="receipt-line"><span>Received</span><span>${peso(s.amountReceived)}</span></div>
-    <div class="receipt-line"><span>Change</span><span>${peso(s.change)}</span></div>
+    ${s.isCredit
+      ? `<div class="receipt-line"><span>Down payment</span><span>${peso(s.amountReceived)}</span></div>
+         <div class="receipt-line" style="font-weight:bold;"><span>BALANCE DUE</span><span>${peso(s.balanceDue)}</span></div>`
+      : `<div class="receipt-line"><span>Received</span><span>${peso(s.amountReceived)}</span></div>
+         <div class="receipt-line"><span>Change</span><span>${peso(s.change)}</span></div>`}
     <div class="receipt-divider"></div><div style="font-size:10px;">Salamat po! Thank you for your business.</div>`;
   document.getElementById('receiptModal').classList.add('active');
 }
@@ -1136,6 +1296,9 @@ function switchTab(tab, btn){
   if(tab==='staff') loadStaff();
   if(tab==='projects') loadProjects();
   if(tab==='customers') renderCustomers();
+  if(tab==='credit') loadCreditSummary();
+  if(tab==='orders') loadOrders();
+  if(tab==='history') loadActivityLog();
 }
 
 /* ================= customers ================= */
@@ -1192,6 +1355,161 @@ function renderCustomers(){
   const cur=sel.value;
   sel.innerHTML='<option value="">Walk-in customer</option>'+customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
   sel.value=cur;
+  const ordSel=document.getElementById('ordCustomerSelect');
+  if(ordSel){
+    const ordCur=ordSel.value;
+    ordSel.innerHTML='<option value="">Walk-in / no account</option>'+customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+    ordSel.value=ordCur;
+  }
+}
+
+/* ================= credit / accounts receivable ================= */
+let creditSales = [];
+async function loadCreditSummary(){
+  const { data, error } = await sb.rpc('get_credit_summary');
+  if(error){ toast('Could not load credit accounts: '+error.message); return; }
+  creditSales = data || [];
+  const totalOutstanding = creditSales.reduce((s,c)=>s+Number(c.balance_due),0);
+  const uniqueCustomers = new Set(creditSales.map(c=>c.customer_id||c.customer_name)).size;
+  countUp(document.getElementById('crTotalOutstanding'), totalOutstanding, pesoShort);
+  document.getElementById('crCustomerCount').textContent = uniqueCustomers;
+  document.getElementById('creditTable').innerHTML = creditSales.length ? creditSales.map(c=>`
+    <tr><td>${new Date(c.sold_at).toLocaleDateString('en-PH')}</td><td>#${c.receipt_no}</td>
+    <td><b>${c.customer_name}</b></td><td>${peso(c.total_due)}</td><td>${peso(c.amount_received)}</td>
+    <td><b style="color:var(--red);">${peso(c.balance_due)}</b></td><td>${c.cashier_name}</td>
+    <td><button class="stock-btn" onclick="openRecordPayment(${c.sale_id})">Record payment</button></td></tr>`).join('') :
+    '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">No outstanding credit balances</td></tr>';
+}
+let payingSaleId = null;
+function openRecordPayment(saleId){
+  const sale = creditSales.find(c=>c.sale_id===saleId); if(!sale) return;
+  payingSaleId = saleId;
+  document.getElementById('payCustomerName').value = sale.customer_name;
+  document.getElementById('payBalance').value = peso(sale.balance_due);
+  document.getElementById('payAmount').value = '';
+  document.getElementById('payNote').value = '';
+  document.getElementById('paymentModal').classList.add('active');
+}
+async function confirmRecordPayment(){
+  const amt = parseFloat(document.getElementById('payAmount').value);
+  if(!amt || amt<=0){ toast('Enter a payment amount'); return; }
+  const { data, error } = await sb.rpc('record_payment', {
+    p_sale_id: payingSaleId, p_amount: amt, p_note: document.getElementById('payNote').value.trim()
+  });
+  if(error){ toast(error.message); return; }
+  closeModal('paymentModal');
+  await loadCreditSummary();
+  toast(data.payment_status==='paid' ? 'Fully paid off' : 'Payment recorded - '+peso(data.new_balance)+' remaining', true);
+}
+
+/* ================= customer orders ================= */
+let orders = [];
+let orderItemsCart = [];
+async function loadOrders(){
+  const [{ data: oData, error: oErr }, { data: iData, error: iErr }, { data: summary }] = await Promise.all([
+    sb.from('customer_orders').select('*').order('created_at', {ascending:false}),
+    sb.from('customer_order_items').select('*'),
+    sb.rpc('get_delivery_status_summary')
+  ]);
+  if(oErr){ toast('Could not load orders: '+oErr.message); return; }
+  orders = (oData||[]).map(o=>({ ...o, items: (iData||[]).filter(i=>i.order_id===o.id) }));
+  if(summary){
+    document.getElementById('ordPending').textContent = summary.pending||0;
+    document.getElementById('ordNoStock').textContent = summary.no_stock||0;
+    document.getElementById('ordDelivered').textContent = summary.delivered||0;
+  }
+  renderOrders();
+}
+function renderOrders(){
+  const t = document.getElementById('ordersTable'); if(!t) return;
+  const statusBadge = s => s==='delivered' ? 'stock-ok' : s==='no_stock' ? 'stock-out' : 'stock-low';
+  const statusLabel = s => s==='no_stock' ? 'No Stock' : s.charAt(0).toUpperCase()+s.slice(1);
+  t.innerHTML = orders.length ? orders.map(o=>`
+    <tr><td>${new Date(o.created_at).toLocaleDateString('en-PH')}</td>
+    <td><b>${o.customer_name}</b>${o.contact_no?`<br><span style="color:var(--muted);font-size:10.5px;">${o.contact_no}</span>`:''}</td>
+    <td>${o.items.map(i=>`${i.product_name} x${i.qty}${i.unit?' '+i.unit:''}`).join('<br>')}</td>
+    <td>${o.expected_delivery?new Date(o.expected_delivery).toLocaleDateString('en-PH'):'-'}</td>
+    <td>
+      <span class="stock-badge ${statusBadge(o.status)}" style="margin-right:6px;">${statusLabel(o.status)}</span>
+      <select onchange="updateOrderStatus(${o.id},this.value)" style="padding:4px;border:1px solid var(--line);border-radius:2px;font-size:10px;">
+        <option value="">Change...</option>
+        <option value="pending" ${o.status==='pending'?'disabled':''}>Pending</option>
+        <option value="delivered" ${o.status==='delivered'?'disabled':''}>Delivered</option>
+        <option value="no_stock" ${o.status==='no_stock'?'disabled':''}>No Stock</option>
+      </select>
+    </td>
+    <td>${isAdmin()?`<button class="danger-btn" onclick="deleteOrder(${o.id})">Remove</button>`:''}</td></tr>`).join('') :
+    '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">No customer orders yet</td></tr>';
+}
+async function updateOrderStatus(id, status){
+  if(!status) return;
+  const { error } = await sb.from('customer_orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+  if(error){ toast('Could not update: '+error.message); return; }
+  await loadOrders(); toast('Order marked '+status.replace('_',' '), true);
+}
+async function deleteOrder(id){
+  if(!confirm('Remove this order?')) return;
+  const { error } = await sb.from('customer_orders').delete().eq('id', id);
+  if(error){ toast('Could not remove: '+error.message); return; }
+  await loadOrders(); toast('Order removed');
+}
+function searchOrderProducts(){
+  const s = document.getElementById('ordSearch').value.trim().toLowerCase();
+  const box = document.getElementById('ordSearchResults');
+  if(!s){ box.innerHTML=''; return; }
+  const matches = products.filter(p=>p.name.toLowerCase().includes(s)).slice(0,8);
+  box.innerHTML = matches.map(p=>`
+    <div class="stock-btn" style="display:block;width:100%;text-align:left;margin-bottom:5px;cursor:pointer;" onclick="addToOrderCart(${p.id})">
+      ${p.name} <span style="color:var(--muted);float:right;">${p.stock} ${p.unit} on hand</span>
+    </div>`).join('') || `<div class="stock-btn" style="display:block;width:100%;text-align:left;cursor:pointer;" onclick="addCustomTextItem('${s.replace(/'/g,"")}')">Add "${s}" as a custom item</div>`;
+}
+function addToOrderCart(id){
+  const p = products.find(x=>x.id===id); if(!p) return;
+  if(orderItemsCart.find(x=>x.product_id===id)){ toast('Already added'); return; }
+  orderItemsCart.push({ product_id:p.id, product_name:p.name, unit:p.unit, qty:1 });
+  document.getElementById('ordSearch').value=''; document.getElementById('ordSearchResults').innerHTML='';
+  renderOrderCart();
+}
+function addCustomTextItem(name){
+  orderItemsCart.push({ product_id:null, product_name:name, unit:'', qty:1 });
+  document.getElementById('ordSearch').value=''; document.getElementById('ordSearchResults').innerHTML='';
+  renderOrderCart();
+}
+function updateOrderCartQty(i,q){ if(orderItemsCart[i]){ orderItemsCart[i].qty = Math.max(1, parseFloat(q)||1); renderOrderCart(); } }
+function removeFromOrderCart(i){ orderItemsCart.splice(i,1); renderOrderCart(); }
+function renderOrderCart(){
+  document.getElementById('ordCart').innerHTML = orderItemsCart.length ? orderItemsCart.map((i,idx)=>`
+    <div class="cart-line"><div class="cart-line-top">
+      <div class="cart-item-name">${i.product_name}</div>
+      <div class="cart-item-qty"><input type="number" value="${i.qty}" min="1" onchange="updateOrderCartQty(${idx},this.value)"></div>
+      <div style="width:40px;color:var(--muted);font-size:11px;">${i.unit||''}</div>
+      <button class="remove-btn" onclick="removeFromOrderCart(${idx})">&times;</button>
+    </div></div>`).join('') : '<div class="cart-empty">No items added yet</div>';
+  document.getElementById('ordCreateBtn').disabled = orderItemsCart.length===0;
+}
+document.addEventListener('input', e=>{ if(e.target.id==='ordSearch') searchOrderProducts(); });
+async function confirmCreateOrder(){
+  if(!requireOnline('Creating an order')) return;
+  if(!orderItemsCart.length) return;
+  const cid = document.getElementById('ordCustomerSelect').value || null;
+  const typedName = document.getElementById('ordCustomerName').value.trim();
+  const custName = cid ? (customers.find(c=>String(c.id)===String(cid))||{}).name : (typedName || 'Walk-in');
+  const btn = document.getElementById('ordCreateBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Saving';
+  const { data, error } = await sb.rpc('create_customer_order', {
+    p_customer_id: cid ? Number(cid) : null,
+    p_customer_name: custName,
+    p_contact_no: document.getElementById('ordContact').value.trim(),
+    p_notes: document.getElementById('ordNotes').value.trim(),
+    p_expected_delivery: document.getElementById('ordExpected').value || null,
+    p_items: orderItemsCart.map(i=>({ product_id:i.product_id, product_name:i.product_name, qty:i.qty, unit:i.unit }))
+  });
+  btn.disabled=false; btn.textContent='Create order';
+  if(error){ toast('Could not create order: '+error.message); return; }
+  orderItemsCart = []; renderOrderCart();
+  ['ordCustomerName','ordContact','ordExpected','ordNotes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ordCustomerSelect').value='';
+  await loadOrders();
+  toast('Order created for '+custName, true);
 }
 
 /* ================= expenses ================= */
@@ -1262,6 +1580,62 @@ async function loadDashboard(){
   drawTop(data.top_products);
   drawCat(data.by_category);
   drawEmp(data.by_employee);
+
+  loadFastMovers(period);
+  loadLowStockAlerts();
+  loadDeliveryStatusForDashboard();
+}
+async function loadFastMovers(period){
+  const { data, error } = await sb.rpc('get_fast_movers', { p_period: period, p_limit: 20 });
+  if(error){ toast('Could not load fast movers: '+error.message); return; }
+  document.getElementById('fastMoversTable').innerHTML = (data&&data.length) ? data.map((r,i)=>`
+    <tr><td>${i+1}</td><td><b>${r.name}</b></td><td>${r.qty_sold}</td><td>${peso(r.revenue)}</td>
+    <td>${r.current_stock!=null?r.current_stock+' '+(r.unit||''):'-'}</td></tr>`).join('') :
+    '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;">No sales in this period yet</td></tr>';
+}
+async function loadLowStockAlerts(){
+  const { data, error } = await sb.rpc('get_low_stock_list', { p_threshold: 10 });
+  if(error){ toast('Could not load stock alerts: '+error.message); return; }
+  document.getElementById('lowStockTable').innerHTML = (data&&data.length) ? data.map(p=>`
+    <tr><td><b>${p.name}</b></td><td>${p.category||'-'}</td>
+    <td><span class="stock-badge ${p.stock<=0?'stock-out':'stock-low'}">${p.stock}</span></td><td>${p.unit||''}</td></tr>`).join('') :
+    '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px;">Nothing running low right now</td></tr>';
+}
+async function loadDeliveryStatusForDashboard(){
+  const { data, error } = await sb.rpc('get_delivery_status_summary');
+  if(error) return;
+  document.getElementById('dashOrdPending').textContent = data.pending||0;
+  document.getElementById('dashOrdNoStock').textContent = data.no_stock||0;
+  document.getElementById('dashOrdDelivered').textContent = data.delivered||0;
+}
+
+/* ================= activity history ================= */
+let activityLog = [];
+async function loadActivityLog(){
+  if(!requireOnline('Activity history')) return;
+  const period = document.getElementById('historyPeriod').value;
+  const { data, error } = await sb.rpc('get_activity_log', { p_period: period, p_limit: 500 });
+  if(error){ toast('Could not load activity: '+error.message); return; }
+  activityLog = data || [];
+  renderActivityLog();
+}
+const HISTORY_BADGE = {
+  'Sale':'stock-ok', 'Payment':'stock-ok', 'Expense':'stock-out', 'Delivery':'stock-low',
+  'Material Pull-out':'stock-low', 'Material Return':'stock-ok', 'Undone Entry':'stock-out',
+  'Customer Order':'stock-ok', 'Staff Account':'stock-low'
+};
+function renderActivityLog(){
+  const filter = document.getElementById('historyTypeFilter').value;
+  const rows = filter ? activityLog.filter(a=>a.type===filter) : activityLog;
+  document.getElementById('historyCount').textContent = 'History ('+rows.length+')';
+  document.getElementById('historyLogTable').innerHTML = rows.length ? rows.map(a=>{
+    const badge = HISTORY_BADGE[a.type] || 'stock-low';
+    const amt = a.amount==null ? '' :
+      (Number(a.amount) < 0 ? `<b style="color:var(--red);">-${peso(Math.abs(a.amount))}</b>` : `<b style="color:#1B5E20;">${peso(a.amount)}</b>`);
+    return `<tr><td>${new Date(a.at).toLocaleString('en-PH')}</td>
+      <td><span class="stock-badge ${badge}">${a.type}</span></td>
+      <td>${a.description}</td><td>${amt}</td><td>${a.by_whom||'-'}</td></tr>`;
+  }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">No activity in this period</td></tr>';
 }
 function kill(k){ if(charts[k]) charts[k].destroy(); }
 const baseOpts={responsive:true,maintainAspectRatio:false,animation:{duration:700}};
