@@ -447,6 +447,14 @@ th.admin-only,td.admin-only{}
     </div>
 
     <div id="projectsTab" class="tab-content">
+      <div class="panel" style="margin-bottom:16px;">
+        <h3>Site Ops <span>Linking</span></h3>
+        <div class="setup-note">When a project here is linked to its Site Ops project, materials your Site Engineer marks "Received" on Site Ops are automatically recorded here too \u2014 tagged (Site Ops) in the material history.</div>
+        <table class="data-table">
+          <thead><tr><th>Site Ops Project</th><th>Linked POS Project</th><th></th></tr></thead>
+          <tbody id="siteopsLinkTable"></tbody>
+        </table>
+      </div>
       <div class="panel">
         <h3>New <span>Project</span></h3>
         <div class="form-row">
@@ -1954,6 +1962,36 @@ async function loadProjects(){
   projects = pData || [];
   pullouts = poData || [];
   renderProjects();
+  loadSiteopsLinks();
+}
+let siteopsProjects = [];
+async function loadSiteopsLinks(){
+  const { data, error } = await sb.rpc('list_siteops_projects');
+  if(error){ toast('Could not load Site Ops projects: '+error.message); return; }
+  siteopsProjects = data || [];
+  renderSiteopsLinks();
+}
+function renderSiteopsLinks(){
+  const t = document.getElementById('siteopsLinkTable'); if(!t) return;
+  t.innerHTML = siteopsProjects.length ? siteopsProjects.map(so=>`
+    <tr><td><b>${so.siteops_name}</b></td>
+    <td>${so.pos_project_name ? `<span class="stock-badge stock-ok">${so.pos_project_name}</span>` : `<span class="stock-badge stock-out">Not linked</span>`}</td>
+    <td>
+      <select onchange="linkSiteopsProject(${so.siteops_id}, this.value)" style="padding:6px;border:1px solid var(--line);border-radius:2px;font-size:11px;">
+        <option value="">${so.pos_project_id ? 'Change link...' : 'Link to POS project...'}</option>
+        <option value="unlink" ${!so.pos_project_id?'disabled':''}>\u2014 Unlink \u2014</option>
+        ${projects.map(p=>`<option value="${p.id}" ${p.id===so.pos_project_id?'selected':''}>${p.name}</option>`).join('')}
+      </select>
+    </td></tr>`).join('') :
+    '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px;">No Site Ops projects found</td></tr>';
+}
+async function linkSiteopsProject(siteopsId, value){
+  if(!value) return;
+  const posId = value === 'unlink' ? null : Number(value);
+  const { error } = await sb.rpc('link_siteops_project', { p_siteops_project_id: siteopsId, p_pos_project_id: posId });
+  if(error){ toast('Could not update link: '+error.message); return; }
+  await loadSiteopsLinks();
+  toast(posId ? 'Linked \u2014 future received materials will sync automatically' : 'Unlinked', true);
 }
 function projectTotals(id){
   const rows = pullouts.filter(x=>x.project_id===id && !x.voided);
